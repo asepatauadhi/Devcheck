@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Devcheck</title>
+<style>
+:root{
+  --bg:#eceff3;--surface:#fff;--ink:#14202c;--mute:#5a6877;--line:#d3dae2;
+  --acc:#1b5ed8;--acc-ink:#fff;--ok:#146a37;--okbg:#ddf1e5;--no:#9c2f1c;--nobg:#f8e2dc;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#161a20;--surface:#1e242c;--ink:#e7ecf1;--mute:#98a5b2;--line:#323b46;
+    --acc:#78a6ff;--acc-ink:#0d1624;--ok:#74d79c;--okbg:#1b3a29;--no:#ff9c88;--nobg:#432620;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 16px 48px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-bottom:16px;border-bottom:2px solid var(--ink)}
+.logo{font-size:22px;font-weight:800;letter-spacing:-.02em;margin:0}
+.logo span{color:var(--acc)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;font-size:14px;font-weight:600;padding:9px 14px;border-radius:6px;border:1.5px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer;min-height:40px}
+button.primary{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}
+button:active{transform:translateY(1px)}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.hero{padding:28px 0 20px}
+.hero h2{margin:0;font-size:clamp(30px,7vw,56px);line-height:1.05;letter-spacing:-.03em;font-weight:800;word-break:break-word}
+.hero p{margin:12px 0 0;color:var(--mute);font-size:clamp(15px,2.4vw,18px);max-width:70ch}
+.search{margin:4px 0 20px}
+.search label{display:block;font-size:14px;font-weight:600;margin-bottom:6px}
+.search input{width:100%;max-width:460px;font:inherit;padding:11px 12px;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)}
+.search input:focus{border-color:var(--acc);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 30%,transparent)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:16px;align-items:start}
+section{background:var(--surface);border:1.5px solid var(--line);border-radius:8px;overflow:hidden;content-visibility:auto;contain-intrinsic-size:auto 300px}
+section h3{margin:0;padding:12px 16px;font-size:16px;font-weight:700;border-bottom:1.5px solid var(--line);border-left:5px solid var(--acc)}
+dl{margin:0}
+.row{display:grid;grid-template-columns:minmax(110px,38%) 1fr;gap:12px;padding:9px 16px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+dt{color:var(--mute);font-size:14px}
+dd{margin:0;font-size:14px;font-weight:600;word-break:break-word;font-variant-numeric:tabular-nums}
+dd.na{color:var(--mute);font-weight:400;font-style:italic}
+dd.long{font-weight:400;font-size:13px;word-break:break-all}
+.chip{display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;border-radius:99px}
+.chip.y{background:var(--okbg);color:var(--ok)}
+.chip.n{background:var(--nobg);color:var(--no)}
+.empty{display:none;padding:24px;text-align:center;color:var(--mute)}
+footer{margin-top:28px;color:var(--mute);font-size:13px;max-width:75ch}
+@media (max-width:420px){.row{grid-template-columns:1fr;gap:2px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 class="logo">Dev<span>check</span></h1>
+    <div class="actions">
+      <button id="refresh" class="primary" type="button">Periksa ulang</button>
+      <button id="copy" type="button">Salin teks</button>
+      <button id="dl" type="button">Unduh JSON</button>
+    </div>
+  </header>
+
+  <div class="hero">
+    <h2 id="h-title">Memeriksa perangkat…</h2>
+    <p id="h-sub"></p>
+  </div>
+
+  <div class="search">
+    <label for="q">Cari informasi</label>
+    <input id="q" type="search" placeholder="Contoh: ram, gpu, baterai" autocomplete="off">
+  </div>
+
+  <div id="out" class="grid" aria-live="polite"></div>
+  <p id="empty" class="empty">Tidak ada hasil. Coba kata kunci lain.</p>
+
+  <footer>
+    Semua data dibaca langsung oleh browser di perangkatmu dan tidak dikirim ke mana pun. Browser sengaja membatasi sebagian informasi demi privasi, misalnya RAM hanya dilaporkan sampai 8 GB dan Safari serta Firefox menyembunyikan banyak detail. Nilai yang tidak tersedia ditandai "Tidak tersedia".
+  </footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+var nav=navigator, S={he:null,bat:null,est:null,dev:null,hz:null,gpu:null}, sections=[];
+var $=function(id){return document.getElementById(id)};
+function t(f){try{var v=f();return v===undefined?null:v}catch(e){return null}}
+function bytes(n){
+  if(n==null||isNaN(n))return null;
+  var u=["B","KB","MB","GB","TB"],i=0;
+  while(n>=1024&&i<4){n/=1024;i++}
+  return (n>=100||i===0?Math.round(n):n.toFixed(1))+" "+u[i];
+}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function mq(q){return t(function(){return matchMedia(q).matches})}
+function dur(s){
+  if(s==null||!isFinite(s))return null;
+  var h=Math.floor(s/3600),m=Math.round(s%3600/60);
+  return h+" jam "+m+" menit";
+}
+
+/* ---------- parse UA ---------- */
+var ua=nav.userAgent||"", uad=nav.userAgentData||null;
+function parseOS(){
+  var m;
+  if(S.he&&S.he.platform){
+    var v=S.he.platformVersion||"";
+    if(S.he.platform==="Windows"&&v){var mj=parseInt(v);return "Windows "+(mj>=13?"11":"10")}
+    return S.he.platform+(v?" "+v:"");
+  }
+  if((m=/Windows NT ([\d.]+)/.exec(ua)))return "Windows NT "+m[1];
+  if((m=/Android ([\d.]+)/.exec(ua)))return "Android "+m[1];
+  if((m=/(?:iPhone|CPU) OS ([\d_]+)/.exec(ua)))return "iOS "+m[1].replace(/_/g,".");
+  if((m=/Mac OS X ([\d_]+)/.exec(ua)))return "macOS "+m[1].replace(/_/g,".");
+  if(/CrOS/.test(ua))return "ChromeOS";
+  if(/Linux/.test(ua))return "Linux";
+  return nav.platform||"Tidak diketahui";
+}
+function parseBrowser(){
+  var m;
+  if(uad&&uad.brands){
+    var b=uad.brands.filter(function(x){return !/not.?a.?brand/i.test(x.brand)&&x.brand!=="Chromium"});
+    if(!b.length)b=uad.brands.filter(function(x){return !/not.?a.?brand/i.test(x.brand)});
+    if(b.length){
+      var full=S.he&&S.he.fullVersionList&&S.he.fullVersionList.filter(function(x){return x.brand===b[0].brand})[0];
+      return b[0].brand+" "+(full?full.version:b[0].version);
+    }
+  }
+  if((m=/Edg\/([\d.]+)/.exec(ua)))return "Edge "+m[1];
+  if((m=/OPR\/([\d.]+)/.exec(ua)))return "Opera "+m[1];
+  if((m=/Firefox\/([\d.]+)/.exec(ua)))return "Firefox "+m[1];
+  if((m=/(?:Chrome|CriOS)\/([\d.]+)/.exec(ua)))return "Chrome "+m[1];
+  if((m=/Version\/([\d.]+).*Safari/.exec(ua)))return "Safari "+m[1];
+  return "Tidak diketahui";
+}
+function engine(){
+  if(/Firefox\//.test(ua))return "Gecko";
+  if(/Chrome|CriOS|Edg|OPR/.test(ua))return "Blink";
+  if(/AppleWebKit/.test(ua))return "WebKit";
+  return null;
+}
+function devType(){
+  var mob=uad?uad.mobile:/Mobi|Android|iPhone/.test(ua);
+  if(/iPad|Tablet/.test(ua)||(/Android/.test(ua)&&!/Mobile/.test(ua))||(nav.platform==="MacIntel"&&nav.maxTouchPoints>1))return "Tablet";
+  return mob?"Ponsel":"Komputer (desktop atau laptop)";
+}
+function ramText(){
+  var d=nav.deviceMemory;
+  if(!d)return null;
+  return d>=8?"8 GB atau lebih":d+" GB";
+}
+
+/* ---------- GPU ---------- */
+function readGPU(){
+  var c=document.createElement("canvas"),out={};
+  var gl=t(function(){return c.getContext("webgl")||c.getContext("experimental-webgl")});
+  if(!gl)return {ok:false,v2:!!t(function(){return document.createElement("canvas").getContext("webgl2")})};
+  var ext=gl.getExtension("WEBGL_debug_renderer_info");
+  out.ok=true;
+  out.vendor=ext?gl.getParameter(ext.UNMASKED_VENDOR_WEBGL):gl.getParameter(gl.VENDOR);
+  out.renderer=ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER);
+  out.version=gl.getParameter(gl.VERSION);
+  out.glsl=gl.getParameter(gl.SHADING_LANGUAGE_VERSION);
+  out.maxTex=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+  out.maxVp=gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+  out.maxAttr=gl.getParameter(gl.MAX_VERTEX_ATTRIBS);
+  out.extCount=(gl.getSupportedExtensions()||[]).length;
+  out.aa=gl.getContextAttributes().antialias;
+  var lose=gl.getExtension("WEBGL_lose_context");if(lose)lose.loseContext();
+  var c2=document.createElement("canvas");
+  var g2=t(function(){return c2.getContext("webgl2")});
+  out.v2=!!g2;
+  if(g2){var l2=g2.getExtension("WEBGL_lose_context");if(l2)l2.loseContext()}
+  return out;
+}
+
+/* ---------- refresh rate (sekali, ~0,5 detik) ---------- */
+function measureHz(){
+  return new Promise(function(res){
+    if(!window.requestAnimationFrame)return res(null);
+    var last=0,d=[],n=0;
+    function f(ts){
+      if(last)d.push(ts-last);
+      last=ts;
+      if(++n<40)requestAnimationFrame(f);
+      else{
+        d.sort(function(a,b){return a-b});
+        var med=d[Math.floor(d.length/2)];
+        res(med?Math.round(1000/med):null);
+      }
+    }
+    requestAnimationFrame(f);
+  });
+}
+
+/* ---------- builders ---------- */
+var yn=function(v){return v==null?null:!!v};
+function build(){
+  var he=S.he||{}, g=S.gpu||{}, bat=S.bat, est=S.est, dev=S.dev, c=nav.connection||nav.mozConnection||nav.webkitConnection;
+  var mem=t(function(){return performance.memory});
+  var navT=t(function(){return performance.getEntriesByType("navigation")[0]});
+  var dtf=t(function(){return Intl.DateTimeFormat().resolvedOptions()})||{};
+  var scr=screen, ori=t(function(){return scr.orientation&&scr.orientation.type});
+  var tz=-new Date().getTimezoneOffset()/60;
+  function cp(type){var e=document.createElement(type==="a"?"audio":"video");return function(m){var r=t(function(){return e.canPlayType(m)});return r?true:false}}
+  var v=cp("v"),a=cp("a");
+  function has(k,o){return k in (o||window)}
+
+  var S1=[
+    {t:"Perangkat",r:[
+      ["Model",he.model||null],
+      ["Jenis",devType()],
+      ["Sistem operasi",parseOS()],
+      ["Arsitektur",he.architecture?he.architecture+(he.bitness?" "+he.bitness+"-bit":""):null],
+      ["Platform",nav.platform||null],
+      ["Vendor",nav.vendor||null],
+      ["Layar sentuh",nav.maxTouchPoints>0],
+      ["Titik sentuh maks.",nav.maxTouchPoints],
+      ["Mode aplikasi (PWA)",mq("(display-mode: standalone)")]
+    ]},
+    {t:"Browser",r:[
+      ["Browser",parseBrowser()],
+      ["Mesin render",engine()],
+      ["Bahasa utama",nav.language],
+      ["Daftar bahasa",(nav.languages||[]).join(", ")||null],
+      ["Cookie aktif",nav.cookieEnabled],
+      ["Do Not Track",nav.doNotTrack||nav.msDoNotTrack||window.doNotTrack||null],
+      ["Penampil PDF",yn(nav.pdfViewerEnabled)],
+      ["Diotomatisasi (webdriver)",yn(nav.webdriver)],
+      ["User agent",{long:ua}]
+    ]},
+    {t:"Prosesor dan memori",r:[
+      ["Jumlah inti CPU",nav.hardwareConcurrency||null],
+      ["RAM (perkiraan)",ramText()],
+      ["Heap JS terpakai",mem?bytes(mem.usedJSHeapSize):null],
+      ["Heap JS dialokasikan",mem?bytes(mem.totalJSHeapSize):null],
+      ["Batas heap JS",mem?bytes(mem.jsHeapSizeLimit):null],
+      ["Kuota penyimpanan",est?bytes(est.quota):null],
+      ["Penyimpanan terpakai",est?bytes(est.usage):null]
+    ]},
+    {t:"Grafis (GPU)",r:[
+      ["GPU",g.renderer||null],
+      ["Vendor GPU",g.vendor||null],
+      ["WebGL",g.ok?g.version:false],
+      ["WebGL 2",yn(g.v2)],
+      ["WebGPU",has("gpu",nav)],
+      ["Versi GLSL",g.glsl||null],
+      ["Ukuran tekstur maks.",g.maxTex?g.maxTex+" px":null],
+      ["Viewport maks.",g.maxVp?g.maxVp[0]+" x "+g.maxVp[1]:null],
+      ["Atribut vertex maks.",g.maxAttr||null],
+      ["Jumlah ekstensi",g.extCount!=null?g.extCount:null],
+      ["Anti-aliasing",yn(g.aa)]
+    ]},
+    {t:"Layar",r:[
+      ["Resolusi layar",scr.width+" x "+scr.height+" px"],
+      ["Area tersedia",scr.availWidth+" x "+scr.availHeight+" px"],
+      ["Viewport (jendela)",innerWidth+" x "+innerHeight+" px"],
+      ["Resolusi fisik (perkiraan)",Math.round(scr.width*devicePixelRatio)+" x "+Math.round(scr.height*devicePixelRatio)+" px"],
+      ["Pixel ratio",devicePixelRatio],
+      ["Kedalaman warna",scr.colorDepth+" bit"],
+      ["Orientasi",ori||null],
+      ["Refresh rate",S.hz?S.hz+" Hz":(S.hz===null&&S.hzDone?null:"Mengukur…")],
+      ["Gamut warna P3",mq("(color-gamut: p3)")],
+      ["Gamut warna Rec.2020",mq("(color-gamut: rec2020)")],
+      ["HDR",mq("(dynamic-range: high)")],
+      ["Tema sistem",mq("(prefers-color-scheme: dark)")?"Gelap":"Terang"],
+      ["Kontras tinggi",mq("(prefers-contrast: more)")],
+      ["Kurangi animasi",mq("(prefers-reduced-motion: reduce)")],
+      ["Penunjuk utama",mq("(pointer: coarse)")?"Kasar (jari)":mq("(pointer: fine)")?"Halus (mouse)":null],
+      ["Mendukung hover",mq("(hover: hover)")]
+    ]},
+    {t:"Baterai",r:bat?[
+      ["Level",Math.round(bat.level*100)+"%"],
+      ["Sedang mengisi",bat.charging],
+      ["Waktu sampai penuh",bat.charging?dur(bat.chargingTime):null],
+      ["Waktu sampai habis",!bat.charging?dur(bat.dischargingTime):null]
+    ]:[["Status baterai",null]]},
+    {t:"Jaringan",r:[
+      ["Online",nav.onLine],
+      ["Tipe koneksi",c&&c.effectiveType?c.effectiveType.toUpperCase():null],
+      ["Perangkat jaringan",c&&c.type||null],
+      ["Perkiraan kecepatan",c&&c.downlink!=null?c.downlink+" Mbps":null],
+      ["Latensi (RTT)",c&&c.rtt!=null?c.rtt+" ms":null],
+      ["Mode hemat data",c?yn(c.saveData):null]
+    ]},
+    {t:"Waktu dan wilayah",r:[
+      ["Zona waktu",dtf.timeZone||null],
+      ["Offset UTC","UTC"+(tz>=0?"+":"")+tz],
+      ["Locale",dtf.locale||null],
+      ["Kalender",dtf.calendar||null],
+      ["Sistem angka",dtf.numberingSystem||null],
+      ["Format jam",t(function(){return new Intl.DateTimeFormat(undefined,{hour:"numeric"}).resolvedOptions().hour12?"12 jam":"24 jam"})],
+      ["Waktu sekarang",new Date().toLocaleString()]
+    ]},
+    {t:"Perangkat input dan media",r:[
+      ["Kamera",dev?dev.videoinput:null],
+      ["Mikrofon",dev?dev.audioinput:null],
+      ["Speaker",dev?dev.audiooutput:null],
+      ["Gamepad terhubung",t(function(){return Array.prototype.filter.call(nav.getGamepads(),Boolean).length})],
+      ["Getar (vibration)",has("vibrate",nav)],
+      ["Bluetooth",has("bluetooth",nav)],
+      ["USB",has("usb",nav)],
+      ["NFC",has("NDEFReader")],
+      ["Serial",has("serial",nav)],
+      ["HID",has("hid",nav)]
+    ]},
+    {t:"Sensor",r:[
+      ["Orientasi perangkat",has("DeviceOrientationEvent")],
+      ["Gerak perangkat",has("DeviceMotionEvent")],
+      ["Akselerometer",has("Accelerometer")],
+      ["Giroskop",has("Gyroscope")],
+      ["Magnetometer",has("Magnetometer")],
+      ["Sensor cahaya",has("AmbientLightSensor")],
+      ["Geolokasi",has("geolocation",nav)],
+      ["Wake Lock",has("wakeLock",nav)],
+      ["Idle Detection",has("IdleDetector")]
+    ]},
+    {t:"Codec video",r:[
+      ["H.264 (AVC)",v('video/mp4; codecs="avc1.42E01E"')],
+      ["H.265 (HEVC)",v('video/mp4; codecs="hvc1.1.6.L93.B0"')],
+      ["VP8",v('video/webm; codecs="vp8"')],
+      ["VP9",v('video/webm; codecs="vp09.00.10.08"')],
+      ["AV1",v('video/mp4; codecs="av01.0.05M.08"')]
+    ]},
+    {t:"Codec audio",r:[
+      ["AAC",a('audio/mp4; codecs="mp4a.40.2"')],
+      ["MP3",a("audio/mpeg")],
+      ["Opus",a('audio/ogg; codecs="opus"')],
+      ["Vorbis",a('audio/ogg; codecs="vorbis"')],
+      ["FLAC",a("audio/flac")],
+      ["WAV",a("audio/wav")]
+    ]},
+    {t:"Fitur web",r:[
+      ["WebAssembly",has("WebAssembly")],
+      ["Service Worker",has("serviceWorker",nav)],
+      ["Web Worker",has("Worker")],
+      ["SharedArrayBuffer",has("SharedArrayBuffer")],
+      ["OffscreenCanvas",has("OffscreenCanvas")],
+      ["WebRTC",has("RTCPeerConnection")],
+      ["WebSocket",has("WebSocket")],
+      ["WebXR",has("xr",nav)],
+      ["Web Audio",has("AudioContext")||has("webkitAudioContext")],
+      ["Pengenalan suara",has("SpeechRecognition")||has("webkitSpeechRecognition")],
+      ["Sintesis suara",has("speechSynthesis")],
+      ["Notifikasi",has("Notification")],
+      ["Web Share",has("share",nav)],
+      ["Clipboard API",has("clipboard",nav)],
+      ["Payment Request",has("PaymentRequest")],
+      ["Picture-in-Picture",yn(document.pictureInPictureEnabled)],
+      ["Layar penuh",yn(document.fullscreenEnabled||document.webkitFullscreenEnabled)],
+      ["File System Access",has("showOpenFilePicker")],
+      ["Media Session",has("mediaSession",nav)]
+    ]},
+    {t:"Penyimpanan browser",r:[
+      ["localStorage",t(function(){return !!window.localStorage})],
+      ["sessionStorage",t(function(){return !!window.sessionStorage})],
+      ["IndexedDB",has("indexedDB")],
+      ["Cache Storage",has("caches")],
+      ["Penyimpanan persisten",has("storage",nav)&&has("persist",nav.storage)]
+    ]},
+    {t:"Halaman ini",r:[
+      ["Protokol",location.protocol.replace(":","")],
+      ["Konteks aman (HTTPS)",window.isSecureContext],
+      ["Waktu muat halaman",navT?Math.round(navT.loadEventEnd||navT.domComplete)+" ms":null],
+      ["Panjang riwayat",history.length],
+      ["Origin terisolasi",yn(window.crossOriginIsolated)]
+    ]}
+  ];
+  return S1;
+}
+
+/* ---------- render ---------- */
+function val(v){
+  if(v===null||v===undefined||v==="")return '<dd class="na">Tidak tersedia</dd>';
+  if(v===true)return '<dd><span class="chip y">Ya</span></dd>';
+  if(v===false)return '<dd><span class="chip n">Tidak</span></dd>';
+  if(typeof v==="object"&&v.long)return '<dd class="long">'+esc(v.long)+'</dd>';
+  return '<dd>'+esc(v)+'</dd>';
+}
+function render(){
+  sections=build();
+  var h="";
+  sections.forEach(function(s){
+    h+='<section><h3>'+esc(s.t)+'</h3><dl>';
+    s.r.forEach(function(r){h+='<div class="row"><dt>'+esc(r[0])+'</dt>'+val(r[1])+'</div>'});
+    h+='</dl></section>';
+  });
+  $("out").innerHTML=h;
+  hero();
+  filter();
+}
+function hero(){
+  var he=S.he||{}, os=parseOS();
+  var title=he.model&&he.model.length>1?he.model:devType()+" "+os.split(" ")[0];
+  $("h-title").textContent=title;
+  var p=[os,parseBrowser()];
+  if(nav.hardwareConcurrency)p.push(nav.hardwareConcurrency+" inti CPU");
+  var r=ramText();if(r)p.push("RAM "+r);
+  p.push("layar "+screen.width+" x "+screen.height);
+  $("h-sub").textContent=p.join(", ");
+}
+function filter(){
+  var q=$("q").value.trim().toLowerCase(), any=false;
+  var secs=$("out").children;
+  for(var i=0;i<secs.length;i++){
+    var rows=secs[i].querySelectorAll(".row"),vis=0,title=secs[i].firstChild.textContent.toLowerCase();
+    for(var j=0;j<rows.length;j++){
+      var show=!q||title.indexOf(q)>-1||rows[j].textContent.toLowerCase().indexOf(q)>-1;
+      rows[j].hidden=!show;if(show)vis++;
+    }
+    secs[i].hidden=!vis;if(vis)any=true;
+  }
+  $("empty").style.display=any?"none":"block";
+}
+
+/* ---------- data async ---------- */
+var tmr;
+function soon(){clearTimeout(tmr);tmr=setTimeout(render,150)}
+function collect(){
+  render();
+  if(uad&&uad.getHighEntropyValues){
+    uad.getHighEntropyValues(["model","platformVersion","architecture","bitness","fullVersionList"]).then(function(x){S.he=x;render()}).catch(function(){});
+  }
+  if(nav.getBattery){
+    nav.getBattery().then(function(b){
+      S.bat=b;
+      ["levelchange","chargingchange","chargingtimechange","dischargingtimechange"].forEach(function(e){b.addEventListener(e,soon)});
+      render();
+    }).catch(function(){});
+  }
+  if(nav.storage&&nav.storage.estimate){
+    nav.storage.estimate().then(function(e){S.est=e;render()}).catch(function(){});
+  }
+  if(nav.mediaDevices&&nav.mediaDevices.enumerateDevices){
+    nav.mediaDevices.enumerateDevices().then(function(l){
+      var c={videoinput:0,audioinput:0,audiooutput:0};
+      l.forEach(function(d){if(c[d.kind]!=null)c[d.kind]++});
+      S.dev=c;render();
+    }).catch(function(){});
+  }
+  measureHz().then(function(h){S.hz=h;S.hzDone=true;render()});
+}
+
+/* ---------- aksi ---------- */
+function asText(){
+  var o="Devcheck - "+new Date().toLocaleString()+"\n";
+  sections.forEach(function(s){
+    o+="\n["+s.t+"]\n";
+    s.r.forEach(function(r){
+      var v=r[1];
+      if(v&&typeof v==="object")v=v.long;
+      if(v===true)v="Ya";else if(v===false)v="Tidak";else if(v==null||v==="")v="Tidak tersedia";
+      o+=r[0]+": "+v+"\n";
+    });
+  });
+  return o;
+}
+function flash(btn,msg){var o=btn.textContent;btn.textContent=msg;setTimeout(function(){btn.textContent=o},1400)}
+$("copy").addEventListener("click",function(){
+  var b=this,txt=asText();
+  if(nav.clipboard&&nav.clipboard.writeText){
+    nav.clipboard.writeText(txt).then(function(){flash(b,"Tersalin")}).catch(fallback);
+  }else fallback();
+  function fallback(){
+    var ta=document.createElement("textarea");ta.value=txt;document.body.appendChild(ta);ta.select();
+    try{document.execCommand("copy");flash(b,"Tersalin")}catch(e){flash(b,"Gagal menyalin")}
+    document.body.removeChild(ta);
+  }
+});
+$("dl").addEventListener("click",function(){
+  var obj={waktu:new Date().toISOString()};
+  sections.forEach(function(s){
+    obj[s.t]={};
+    s.r.forEach(function(r){var v=r[1];if(v&&typeof v==="object")v=v.long;obj[s.t][r[0]]=v});
+  });
+  var url=URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)],{type:"application/json"}));
+  var a=document.createElement("a");a.href=url;a.download="devcheck.json";document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(url)},1000);
+});
+$("refresh").addEventListener("click",function(){
+  S.gpu=readGPU();S.hz=undefined;S.hzDone=false;collect();flash(this,"Diperbarui");
+});
+$("q").addEventListener("input",filter);
+var rz;addEventListener("resize",function(){clearTimeout(rz);rz=setTimeout(render,250)});
+addEventListener("online",soon);addEventListener("offline",soon);
+if(screen.orientation)screen.orientation.addEventListener("change",soon);
+var cn=nav.connection;if(cn&&cn.addEventListener)cn.addEventListener("change",soon);
+
+S.gpu=readGPU();
+collect();
+})();
+</script>
+</body>
+</html>
